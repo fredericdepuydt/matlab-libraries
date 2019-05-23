@@ -78,6 +78,7 @@ classdef eth < handle
     end
     properties (Hidden)
         raw
+        time_end
     end
     methods
         function obj = eth(num)
@@ -445,10 +446,24 @@ classdef eth < handle
                         end
                         
                         if(timestamp_ns)
-                            obj(packetNum).time = TimestampSec+(TimestampMicroSec*1e-9);
+                            if(packetNum == 1)
+                                StartTimestampSec = TimestampSec;
+                                StartTimestampMicroSec = TimestampMicroSec;
+                                obj(packetNum).time = 0;
+                            else
+                                obj(packetNum).time = (TimestampSec-StartTimestampSec) + ((TimestampMicroSec-StartTimestampMicroSec)*1e-9);
+                            end
+                            
                         else
-                            obj(packetNum).time = TimestampSec+(TimestampMicroSec*1e-6);
+                            if(packetNum == 1)
+                                StartTimestampSec = TimestampSec;
+                                StartTimestampMicroSec = TimestampMicroSec;
+                                obj(packetNum).time = 0;
+                            else
+                                obj(packetNum).time = (TimestampSec-StartTimestampSec) + ((TimestampMicroSec-StartTimestampMicroSec)*1e-6);
+                            end
                         end
+                        obj(packetNum).time_end =  
                         
                         switch (GlobalHeader.network)
                             case 1
@@ -481,6 +496,7 @@ classdef eth < handle
                     end
                     if(~isempty(packetData))
                         obj(packetNum).readByteStream(packetData);
+                        obj(packetNum).time_end = obj(packetNum).time + obj(packetNum).packetLen*8*10e-9;
                     end
                     packetData = [];
                     packetNum = packetNum + 1;
@@ -566,7 +582,8 @@ classdef eth < handle
                         end
                     end
                     if(verbose);assignin('base', 'pcap_options', OptionStruct);end;
-                end
+                    end
+                    
                 if pcapng
                     idx = idx + blockLength;
                 else
