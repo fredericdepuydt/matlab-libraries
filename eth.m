@@ -463,7 +463,6 @@ classdef eth < handle
                                 obj(packetNum).time = (TimestampSec-StartTimestampSec) + ((TimestampMicroSec-StartTimestampMicroSec)*1e-6);
                             end
                         end
-                        obj(packetNum).time_end =  
                         
                         switch (GlobalHeader.network)
                             case 1
