@@ -1,5 +1,5 @@
-source_dir = [root.get,'\00. User-defined Functions\Original Code\'];
-target_dir = [root.get,'\00. User-defined Functions\'];
+source_dir = [root.get,'\00. User-defined Functions\'];
+target_dir = [root.get,'\00. User-defined Functions\release'];
 varargin = {};
 % DEPLOYPCODE recursively creates p-code versions of m-files in a given folder
 %
