@@ -50,7 +50,7 @@ classdef ethPHYdecode
                 end
             end
             
-            if(~exist('verbose','var'));verbose=-1;warning('All underlying functions are executed in verbose mode');end;
+            if(~exist('verbose','var'));verbose=-1;warn('All underlying functions are executed in verbose mode');end;
             if(~exist('threshold','var'));threshold=0.5;end;
             if(~exist('cut_off_frequency','var'));cut_off_frequency=128e6;end;
             
@@ -327,8 +327,8 @@ classdef ethPHYdecode
             usX = [usX , sX((0.995<dsX & dsX<1.005))]; % ODD
             sX = sort(usX); % SORTING
             clear usX dsX;
+            if(verbose);disp(['Number of reliable bit samples: ' num2str(length(sX))]);end
             
-            disp(['Number of reliable bit samples: ' num2str(length(sX))]);
             
             %% DETERMINING UNRELIABLE BIT SAMPLES BY INTERPOLATION
             dsX = diff(sX);

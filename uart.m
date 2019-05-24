@@ -351,7 +351,7 @@ classdef uart < handle
                 end
                 d{i,6} = bgcolorgen(objDisplay.service,objDisplay.service_color*255,objDisplay.back_color*255);
                 d{i,7} = colorgen(objDisplay.message,objDisplay.message_color*255);
-                if(~isempty(obj(i).fc));d{i,8}=obj(i).fc;end;
+                if(~isempty(obj(i).fc));d{i,8}=obj(i).fc; end;
                 d{i,9} = '';
                 for j=1:length(obj(i).pdu)
                     d{i,9} = [d{i,9} ' ' dec2hex(obj(i).pdu(j))];

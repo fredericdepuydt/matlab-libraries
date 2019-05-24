@@ -248,10 +248,6 @@ classdef eth < handle
             byteOrderBigPCAP_ns = 2712812621; % hex2dec('A1B23C4D');
             byteOrderLittlePCAP_ns = 1295823521; % hex2dec('4D3CB2A1');
             
-            VLANCode = [129,0];
-            PROFINETType = [136,146];
-            EtherTypeIP = [8,0];
-            
             %% PCAP OR PCAPNG
             pcapng = 0; timestamp_ns = 0;
             byteOrder = sum(data(1:4).*[2^24,2^16,2^8,2^0]);
@@ -480,7 +476,8 @@ classdef eth < handle
                                 obj(packetNum).frame.netANALYZER.Type = mod(data(idx+17),64);
                                 switch(obj(packetNum).frame.netANALYZER.Type)
                                     case 4
-                                        packetData = data(idx+20:idx+16+SnapshotLength-1);
+                                        packetData = data(idx+20:idx+12+SnapshotLength-1);
+                                        obj(packetNum).CRC = data(idx+12+SnapshotLength:idx+15+SnapshotLength);
                                     case 5
                                         obj(packetNum).frame.netANALYZER.Event_on = data(idx+35);
                                         obj(packetNum).frame.netANALYZER.Event_type = data(idx+36);
@@ -500,7 +497,7 @@ classdef eth < handle
                     packetData = [];
                     packetNum = packetNum + 1;
                     %PCAP(packetNum).body.absTime = datestr(PCAP(packetNum).body.Timestamp/86400/10^6 + datenum(1970,1,1));
-                elseif pcapng && sum(blockType.*[2^24,2^16,2^8,2^0]) == ifDescBlock
+                elseif pcapng && sum(blockType.*[2^24,2^16,2^8,2^0]) == ifDescBlock                    
                     %Extracting data from interface description block
                     if byteOrder
                         LinkType = pcapBody(1:2);
@@ -668,8 +665,8 @@ classdef eth < handle
                         obj(packetNum).CRC = NibbleData(end-7:2:end)+NibbleData(end-6:2:end)*16;
                         obj(packetNum).time = X(i);
                         obj(packetNum).readByteStream(packetData);
+                        obj(packetNum).time_end = obj(packetNum).time + obj(packetNum).packetLen*8*10e-9;
                         obj(packetNum).frame.encapsulation_type = 1;
-                        
                         packetNum = packetNum + 1;
                     end
                 end
@@ -677,12 +674,99 @@ classdef eth < handle
         end
     end
     methods
+        function result = filter(obj, filterStr)
+            %expression = '\s*(!|)\s*(da|DA|sa|SA|fc|FC|sd|SD|illegal)\s*(=|<>|)\s*(\d*)\s*(\&\&|and|AND|\|\||or|OR|)';
+            expression = '\s*(!|)\s*(eth\.src|eth\.dst|eth\.addr)\s*(==|!=|eq)\s*([0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2})\s*(\&\&|and|AND|\|\||or|OR|)';
+            [tokens, matches] = regexp(filterStr,expression,'tokens','match');
+            findObjFilter = {};
+            i = 1;
+            if ~isempty(tokens)
+                % if there are more than 2 statements provide a logical operators
+                % check                
+                while i<=length(tokens)
+                    clear logicRule;
+                    % An information from i-th user filter statement
+                    precedingSign = tokens{i}{1};
+                    filterName = tokens{i}{2};
+                    equalSign = tokens{i}{3};
+                    filterValue = tokens{i}{4};
+                    if i>1
+                        logicalOperator = tokens{i-1}{5};
+                        if strcmp(logicalOperator,'&&') || strcmp(logicalOperator,'and') || strcmp(logicalOperator,'AND')
+                            logicRule = '-and';
+                        elseif strcmp(logicalOperator,'||') || strcmp(logicalOperator,'or') || strcmp(logicalOperator,'OR')
+                            logicRule = '-or';
+                        else
+                            error('No logic rule between statements');
+                        end
+                    end
+                    
+                    if strcmp(precedingSign,'!')
+                        precedingRule = '-not';
+                    else
+                        clear precedingRule;
+                    end
+                    
+                    if strcmp(equalSign,'<>')
+                        equalRule = '-not';
+                    elseif strcmp(equalSign,'!=')
+                        equalRule = '-not';
+                    elseif strcmp(equalSign,'=')
+                        equalRule = '-and';
+                    elseif strcmp(equalSign,'==')
+                        equalRule = '-and';
+                    else
+                        equalRule = '-and';
+                    end
+                    
+                    if exist('precedingRule','var')
+                        if strcmp(precedingRule,'-not')
+                            if strcmp(equalRule,'-not')
+                                equalRule = '-and';
+                            elseif strcmp(equalRule,'-and')
+                                equalRule = '-not';
+                            end
+                        end
+                    end
+                    
+                    if exist('logicRule','var')
+                        findObjFilter = {findObjFilter{:}, logicRule};
+                    end
+                    
+                    if isempty(findObjFilter)
+                        findObjFilter = {equalRule};
+                    else
+                        findObjFilter = {findObjFilter{:}, equalRule};
+                    end
+                    
+                    switch lower(filterName)
+                        case {'eth.src'}
+                            findObjFilter = {findObjFilter{:}, 'srcMac', str2double(filterValue)};
+                        case {'eth.dst'}                            
+                            findObjFilter = {findObjFilter{:}, 'dstMac', str2double(filterValue)};
+                        
+                            %findObjFilter = {findObjFilter{:}, 'dstMac', str2double(filterValue)};
+                        %case {'illegal'}
+                        %    findObjFilter = {findObjFilter{:}, 'type_id', 0};
+                        %case {'fcs'}
+                        %    findObjFilter = {findObjFilter{:}, 'type_id', -1};
+                        %case {'sap'}
+                        %    findObjFilter = {findObjFilter{:}, 'sap', true};
+                    end
+                    i = i + 1;
+                end
+                result = findobj(obj,findObjFilter{:})';
+            else
+                result = {};
+            end               
+        end
         function readByteStream (obj, packetData)
             % This function reads packet byte stream
-            PN_VLANCode = [129,0];
-            PROFINETType = [136,146];
-            EtherTypeIP = [8,0];
-            EtherTypeARP = [8,6];
+            EtherTypeVLAN = [129,0]; % 0x8100
+            EtherTypePROFINET = [136,146]; % 0x8892
+            EtherTypeIP = [8,0]; % 0x0800
+            EtherTypeARP = [8,6]; % 0x0806
+            EtherTypeHSR = [137,47]; % 0x892F
             
             % Creating an eth object
             obj.dstMac = packetData(1:6);
@@ -691,66 +775,46 @@ classdef eth < handle
             % Calculating a full packet length with preambule and fcs/crc
             obj.packetLen = 8 + length(packetData) + 4;
             
-            if isequal(packetData(13:14),PN_VLANCode)
-                
-                % Packet has a VLAN field
-                % QTagCtrlHex = dec2hex(packetData(15:16),2);
-                QTagCtrlBit = dec2bin(packetData(15:16),8);
-                QTagPriority = QTagCtrlBit(1,1:3);
-                QTagFl = QTagCtrlBit(1,4);
-                QTagVLANID = [QTagCtrlBit(1,5:8) QTagCtrlBit(2,1:8)];
-                % Checking Ethertype field
-                
-                if sum(packetData(17:18).*[2^8, 2^0]) > 1500
-                    EtherTypeHex = dec2hex(packetData(17:18),2);
-                    obj.EthertypeOrLength = ['0x' sscanf(EtherTypeHex','%c')];
-                else
-                    obj.EthertypeOrLength = packetData(17:18);
+            evaluate = true;
+            while(evaluate)     
+                evaluate = false;
+                if isequal(packetData(13:14),EtherTypeVLAN) % VLAN TAG
+                    evaluate = true;
+                    QTagCtrlBits = dec2bin(packetData(15:16),8);
+                    obj.VLANTAG.QTag = '8100';
+                    obj.VLANTAG.Priority = bin2dec(QTagCtrlBits(1,1:3));
+                    obj.VLANTAG.Flag = QTagCtrlBits(1,4);
+                    obj.VLANTAG.VLAN_ID = bin2dec([QTagCtrlBits(1,5:8) QTagCtrlBits(2,1:8)]);
+                    packetData = [packetData(1:12) packetData(17:end)];
                 end
-                
-                obj.VLANTAG.QTag = '8100';
-                obj.VLANTAG.Priority = QTagPriority;
-                obj.VLANTAG.Flag = QTagFl;
-                obj.VLANTAG.VLAN_ID = QTagVLANID;
-                %      obj.VLANTAG.QTagCtrl = sscanf(QTagCtrlHex','%c');
-                obj.APDU = packetData(19:end);
-                
-                if isequal(packetData(17:18),PROFINETType)
-                    
-                    % Checking frame ID
-                    FrameID = sum(packetData(19:20).*[2^8, 2^0]);
-                    PNIO_FrameIDHex = dec2hex(packetData(19:20),2);
-                    obj.EtherTypeSpecificData.PNIO_FrameID = sscanf(PNIO_FrameIDHex','%c');
-                    % Comparing FrameID
-                    obj.setFrameID(FrameID, obj.APDU, 1);
-                    
+                if isequal(packetData(13:14),EtherTypeHSR) % HSR Header            
+                    evaluate = true;
+                    HSRBits = dec2bin(packetData(15:16),8);
+                    obj.EtherTypeSpecificData.HSR.Network = HSRBits(1,1:3);
+                    obj.EtherTypeSpecificData.HSR.LSDU = bin2dec([HSRBits(1,5:8) HSRBits(2,1:8)]);
+                    obj.EtherTypeSpecificData.HSR.Sequence = sum(packetData(17:18).*[2^8, 2^0]);
+                    packetData = [packetData(1:12) packetData(19:end)];
                 end
+            end
+            if sum(packetData(13:14).*[2^8, 2^0]) <= 1500
+                obj.EthertypeOrLength = sum(packetData(13:14).*[2^8, 2^0]);
+                obj.APDU = packetData(15:end);
             else
-                if sum(packetData(13:14).*[2^8, 2^0]) > 1500
-                    EtherTypeHex = dec2hex(packetData(13:14),2);
-                    obj.EthertypeOrLength = ['0x' sscanf(EtherTypeHex','%c')];
-                    obj.APDU = packetData(15:end);
-                else
-                    obj.EthertypeOrLength = sum(packetData(13:14).*[2^8, 2^0]);
-                    obj.APDU = packetData(15:end);
-                end
-                
-                if isequal(packetData(13:14),EtherTypeARP)
-                    
+                EtherTypeHex = dec2hex(packetData(13:14),2);
+                obj.EthertypeOrLength = ['0x' sscanf(EtherTypeHex','%c')];
+                obj.APDU = packetData(15:end);
+                if isequal(packetData(13:14),EtherTypeARP)                    
                     obj.packetDesc = 'ARP';
-                    obj.APDU = packetData(15:end);
-                    
-                elseif isequal(packetData(13:14),PROFINETType)
-                    
+                    obj.APDU = packetData(15:end);                    
+                elseif isequal(packetData(13:14),EtherTypePROFINET)                    
                     FrameID = sum(packetData(15:16).*[2^8, 2^0]);
                     PNIO_FrameIDHex = dec2hex(packetData(15:16),2);
                     obj.EtherTypeSpecificData.PNIO_FrameID = sscanf(PNIO_FrameIDHex','%c');
                     obj.APDU = packetData(15:end);
                     % Comparing FrameID
-                    obj.setFrameID(FrameID, obj.APDU, 0);
-                    
+                    obj.setFrameID(FrameID, obj.APDU, 0);                    
                 elseif isequal(packetData(13:14),EtherTypeIP)
-                    
+
                     % IPv4 packet
                     IPLength = dec2hex(packetData(15));
                     IPLength = hex2dec(IPLength(2))*4; % Obtaining octets length
@@ -760,9 +824,9 @@ classdef eth < handle
                     obj.EtherTypeSpecificData.IP_dstIP = packetData(15+16:15+16+3);
                     obj.EtherTypeSpecificData.IP_protocol = packetData(15+9);
                     obj.EtherTypeSpecificData.IP_headerLength = IPLength;
-                    
+
                     switch obj.EtherTypeSpecificData.IP_protocol
-                        
+
                         case 17
                             % Reading UDP
                             obj.EtherTypeSpecificData.IP_SpecificData.UDP_srcPort = sum(packetData(15+IPLength:15+IPLength+1).*[2^8,2^0]);
@@ -771,9 +835,9 @@ classdef eth < handle
                             % Check if UDP has DCE/RPC protocol
                             UDPdata = packetData(15+IPLength+8:end);
                             RPCbyteOrder = UDPdata(5);
-                            
+
                             if length(UDPdata) >= 80
-                                
+
                                 if RPCbyteOrder >= 16
                                     % RPCbyteOrder = 0;
                                     % little-endian byte order
@@ -789,46 +853,40 @@ classdef eth < handle
                                         UDPdata(31:32) UDPdata(34:-1:33) ...
                                         UDPdata(40:-1:35)};
                                 end
-                                
+
                                 PNIO_RPCuuid = {'DEA00001-6C97-11D1-8271-00A02442DF7D',...
                                     'DEA00002-6C97-11D1-8271-00A02442DF7D',...
                                     'DEA00003-6C97-11D1-8271-00A02442DF7D',...
                                     'DEA00004-6C97-11D1-8271-00A02442DF7D'};
                                 RPCfragmentLength = sum(RPCfragmentLength.*[2^8,2^0]);
-                                
+
                                 if length(UDPdata) == 80 + RPCfragmentLength
                                     % it is RPC protocol
                                     % checking UUID refers to PN_IO
                                     UUID = strjoin(cellfun(@(x) sprintf('%s',dec2hex(x,2)'),RPCuuid, 'UniformOutput', false),'-');
                                     obj.EtherTypeSpecificData.IP_SpecificData.RPCuuid = UUID;
                                     obj.EtherTypeSpecificData.IP_SpecificData.RPCLen = RPCfragmentLength;
-                                    
+
                                     if any(strcmp(PNIO_RPCuuid,UUID))
                                         % This is a PN-IO CM packet
                                         obj.packetDesc = 'PN_IO CM';
                                     end
-                                    
+
                                 end
-                                
+
                             end
-                            
-                        case 6
-                            
+
+                        case 6                            
                             %Reading TCP
                             obj.EtherTypeSpecificData.IP_SpecificData.TCP_srcPort = sum(packetData(15+IPLength:15+IPLength+1).*[2^8,2^0]);
                             obj.EtherTypeSpecificData.IP_SpecificData.TCP_dstPort = sum(packetData(15+IPLength+2:15+IPLength+3).*[2^8,2^0]);
                             obj.EtherTypeSpecificData.IP_SpecificData.TCP_sequenceNumber = packetData(15+IPLength+4:15+IPLength+7);
-                            
+
                         otherwise
-                            
+
                     end
                 end
-                % OTHER PACKETS GO HERE
-                % Checking Ethertype field
-                
-                
             end
-            
         end
     end
     methods (Access = private)
