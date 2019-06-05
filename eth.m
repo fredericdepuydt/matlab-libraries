@@ -5,7 +5,7 @@
 %  %    Author: Frederic Depuydt                                          %
 %  %    Company: KU Leuven                                                %
 %  %    Contact: frederic.depuydt@kuleuven.be; f.depuydt@outlook.com      %
-%  %    Version: 1.1                                                      %
+%  %    Version: 1.2                                                      %
 %  %                                                                      %
 %  %    An ETHERNET class to analyse packets from Wireshark               %
 %  %    and some Tektronix Osciloscopes.                                  %
@@ -798,10 +798,10 @@ classdef eth < handle
             if(~exist('verbose','var'));verbose=-1;warn('All underlying functions are executed in verbose mode');end;
             try
                 [logicals,filter] = filter_intern(obj,filterStr,verbose-(verbose>0));
-                if(verbose)
-                    disp(['FILTER: ' filter]);
-                end
                 result = obj(logicals);
+                if(verbose)
+                    disp(['FILTER: ' filter newline ' (' num2str(length(result)) ' results)']);
+                end                
             catch ME
                 if(strcmp(ME.identifier,'eth:filter_intern:invalid_filter'))
                     warn(['Invalid filter: ' filterStr newline ' Error in filter part: ' ME.message newline ' (internal workaround: Filter not applied)']);
@@ -876,22 +876,24 @@ classdef eth < handle
                 
                 switch lower(filterName)
                     case {'eth.src'}
-                        filter = ['eth.src == ' filterValue];
                         for i = 1:length(obj)
                             result(i) = all(obj(i).srcMac == mac);
                         end
                     case {'eth.dst'}
-                        filter = ['eth.dst == ' filterValue];
                         for i = 1:length(obj)
                             result(i) = all(obj(i).dstMac == mac);
                         end
-                    case {'eth.addr'}
-                        filter = ['eth.addr == ' filterValue];
+                    case {'eth.addr'}                        
                         for i = 1:length(obj)
                             result(i) = all((obj(i).srcMac == mac) | (obj(i).dstMac == mac));
                         end
                 end
-                result = (result & filterSign) | (~filterSign && ~result);
+                if(filterSign)
+                	filter = [filterName ' == ' eth.mac2hex(mac)];
+                else
+                    filter = [filterName ' != ' eth.mac2hex(mac)];
+                end
+                result = (result & filterSign) | (~filterSign & ~result);
                 return;
             end
             
@@ -910,11 +912,16 @@ classdef eth < handle
                 filterSign = isequal(tokens{1}{1},' eq ') | isequal(tokens{1}{1},'==');
                 result = logical.empty(0,length(obj));
                 
-                filter = ['eth.type == 0x' dec2hex(filterValue,4)];
+                
                 for i = 1:length(obj)
                     result(i) = (obj(i).ethertype == filterValue);
                 end
-                result = (result & filterSign) | (~filterSign && ~result);
+                if(filterSign)
+                    filter = ['eth.type == 0x' dec2hex(filterValue,4)];
+                else
+                    filter = ['eth.type != 0x' dec2hex(filterValue,4)];
+                end
+                result = (result & filterSign) | (~filterSign & ~result);
                 return;
             end
             
