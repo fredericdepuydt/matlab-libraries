@@ -1,3 +1,3 @@
-librarydirectory = 'C:\Users\Frederic Depuydt\Google Drive\Projects\Matlab\00. User-defined Functions';
+librarydirectory = '%LIB:Projects%\MATLAB\00.User-defined Functions';
 global rootdirectory
-rootdirectory = 'C:\Users\Frederic Depuydt\Google Drive\Projects\Matlab';
+rootdirectory = '%LIB:Projects%\MATLAB';
