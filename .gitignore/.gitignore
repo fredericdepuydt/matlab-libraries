@@ -1,5 +1,9 @@
+# Exclude MATLAB temporary and variable files
+*.mat
+*.asv
+*.csv
+
+
 # Compiled source #
 ###################
 *.p
-*.mat
-*.asv

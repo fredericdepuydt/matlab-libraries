@@ -911,8 +911,6 @@ classdef eth < handle
             if ~isempty(tokens) %Ethertype
                 filterSign = isequal(tokens{1}{1},' eq ') | isequal(tokens{1}{1},'==');
                 result = logical.empty(0,length(obj));
-                
-                
                 for i = 1:length(obj)
                     result(i) = (obj(i).ethertype == filterValue);
                 end
@@ -925,7 +923,7 @@ classdef eth < handle
                 return;
             end
             
-            expression = '^\s*(arp|ip|lldp)\s*$';
+            expression = '^\s*(arp|ip|lldp|pn_io)\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
             if ~isempty(tokens) %Ethertype as HEX
                 filter = tokens{1}{1};
@@ -935,14 +933,16 @@ classdef eth < handle
                     case {'ip'}
                         [result, ~] = obj.filter_intern('eth.type == 0x0800');
                     case {'lldp'}
-                        [result, ~] = obj.filter_intern('eth.type == 0x88CC');
+                        [result, ~] = obj.filter_intern('eth.type == 0x88CC');                    
+                    case {'pn_io'}
+                        [result, ~] = obj.filter_intern('eth.type == 0x8892');
                 end
                 return;
             end
             
-            expression = '^\s*(dns|udp|tcp|pn_io|pn_dcp|pn_mrp|pn_ptcp|pn_rt|pn_mrrt)\s*$';
+            expression = '^\s*(dns|udp|tcp|pn_dcp|pn_mrp|pn_ptcp|pn_rt|pn_mrrt)\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
-            if ~isempty(tokens) %Ethertype as HEX
+            if ~isempty(tokens) %Protocol
                 ME = MException('eth:filter_intern:unsupported_filter', filterStr);
                 throw(ME);
             end
