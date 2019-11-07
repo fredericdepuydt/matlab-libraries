@@ -1,3 +1,27 @@
-librarydirectory = '%LIB:Projects%\MATLAB\00.User-defined Functions';
+%% PREFIX PROJECTS DIRECTORY
+prefix(1)="%LIB:Projects%";
+prefix(2)="D:\Users\Frederic Depuydt\Google Drive\Projects";
+prefix(3)="E:\Users\Frederic Depuydt\Google Drive\Projects";
+
+%% MATLAB PROJECTS LIBRARY DIRECTORY
+librarydirectory = find_dir(prefix, '\MATLAB\00.User-defined Functions');
+
+%% MATLAB PROJECTS ROOT DIRECTORY
 global rootdirectory
-rootdirectory = '%LIB:Projects%\MATLAB';
+rootdirectory = find_dir(prefix, '\MATLAB');
+
+%% CLEANING UP
+clear prefix;
+
+%% FUCTIONS
+function str = find_dir(prefix, suffix)
+	for i=1:length(prefix)
+		if(exist([char(prefix(i)) char(suffix)], 'dir'))
+			str = [char(prefix(i)) char(suffix)];
+			return;
+		end
+	end
+	error(['No MATLAB Projects directory found: ' char(prefix(i)) char(suffix)])
+    str = '';
+	return;
+end
