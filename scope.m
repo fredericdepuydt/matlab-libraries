@@ -297,6 +297,15 @@ classdef scope
                 hold off;
             end
         end
+        function Y = getValues(obj,channel)
+            if(~exist('channel','var'));error('No channel selected');end;
+            if(isnumeric(channel))
+                Y = obj.value{channel};
+            else
+                Y = obj.values(channel);
+            end
+                
+        end
         function scale(obj,str,target)
             if(~exist('pass','var'));target=0;end;
             for i=1:length(obj.channels)
@@ -319,7 +328,7 @@ classdef scope
             if( exist(file, 'dir') )
                 folder = file;
                 % Get a list of all files that have the extension '.isf' or '.ISF'.
-                files = [ dir(fullfile(folder, '*.ISF')); dir(fullfile(folder, '*.isf')) ];
+                files = [ dir(fullfile(folder, '*.isf')) ];
             else
                 % The pattern is not a folder, so must be a file name or a pattern with
                 % wildcards (such as 'Traces/TEK0*.ISF').

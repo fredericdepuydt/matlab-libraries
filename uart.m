@@ -104,6 +104,10 @@ classdef uart < handle
             obj.sap = false;
         end
         function value = get.type(obj)
+            if(obj.type_id <= 0)
+                value = 'Illegal';
+                return
+            end
             index = round(log2(obj.type_id)+1);
             values = {'SD1','SD2','SD3','SD4','SC'};
             if (index >= 1 && index <= 5 )
@@ -240,12 +244,20 @@ classdef uart < handle
                     value.back_color = [0 1 1];
                     value.service_color = [0 0 0];
                     value.message_color = [0 0 1];
+                case 0                    
+                    value.back_color = [0 1 1];
+                    value.service_color = [0 0 0];
+                    value.message_color = [0 0 1];
+                case -1                    
+                    value.back_color = [1 0 0];
+                    value.service_color = [0 0 0];
+                    value.message_color = [1 0 0];
             end
         end
         %% Now filter function captures 3 groups: filter name, filter value
         function result = filter(obj, filterStr)
-            expression = '\s*(!|)\s*(da|DA|sa|SA|fc|FC|sd|SD|illegal)\s*(=|<>|)\s*(\d*)\s*(\&\&|and|AND|\|\||or|OR|)';
-            [tokens, matches] = regexp(filterStr,expression,'tokens','match');
+            expression = '\s*(!|)\s*(da|sa|fcs|fc|sd|sc|illegal)\s*(=|<>|)\s*(\d*)\s*(\&\&|and|AND|\|\||or|OR|)';
+            [tokens, matches] = regexp(lower(filterStr),expression,'tokens','match');
             findObjFilter = {};
             i = 1;
             if ~isempty(tokens)
@@ -312,7 +324,9 @@ classdef uart < handle
                         case {'da'}
                             findObjFilter = {findObjFilter{:}, 'da', str2double(filterValue)};
                         case {'sa'}
-                            findObjFilter = {findObjFilter{:}, 'sa', str2double(filterValue)};
+                            findObjFilter = {findObjFilter{:}, 'sa', str2double(filterValue)};                        
+                        case {'fcs'}
+                            findObjFilter = {findObjFilter{:}, 'type_id', -1};
                         case {'fc'}
                             findObjFilter = {findObjFilter{:}, 'fc', str2double(filterValue)};
                         case {'sd'}
@@ -321,8 +335,6 @@ classdef uart < handle
                             findObjFilter = {findObjFilter{:}, 'type_id', 16};
                         case {'illegal'}
                             findObjFilter = {findObjFilter{:}, 'type_id', 0};
-                        case {'fcs'}
-                            findObjFilter = {findObjFilter{:}, 'type_id', -1};
                         case {'sap'}
                             findObjFilter = {findObjFilter{:}, 'sap', true};
                     end
@@ -354,7 +366,11 @@ classdef uart < handle
                 if(~isempty(obj(i).fc));d{i,8}=obj(i).fc; end;
                 d{i,9} = '';
                 for j=1:length(obj(i).pdu)
-                    d{i,9} = [d{i,9} ' ' dec2hex(obj(i).pdu(j))];
+                    if(obj(i).pdu(j)>= 0 && obj(i).pdu(j) <= 255)
+                        d{i,9} = [d{i,9} ' ' dec2hex(obj(i).pdu(j))];
+                    else
+                        d{i,9} = [d{i,9} ' --'];
+                    end
                 end
             end
             
@@ -547,7 +563,7 @@ classdef uart < handle
             PERIOD = 1/BAUDRATE;
             
             X = objScope.time;
-            Y = objScope.values(channel);
+            Y = objScope.getValues(channel);
             if(BAUDRATE>160000)
                 Y = objScope.bandstop(Y,[40,60;140,160;2*BAUDRATE,1e99],verbose-(verbose>0));
             elseif(BAUDRATE>60000)
@@ -572,7 +588,7 @@ classdef uart < handle
                 figure;
                 subplot(4,1,1);
                 XT = objScope.time;
-                YT = objScope.values(channel);
+                YT = objScope.getValues(channel);
                 hold on;
                 plot(XT(Xmin<XT & XT<Xmax),YT(Xmin<XT & XT<Xmax), 'color', [0.5 0.5 0.5]);
                 plot(X(plotMin:plotMax),Y(plotMin:plotMax),'r');
@@ -590,8 +606,8 @@ classdef uart < handle
             %% CALCULATING ONE AND ZERO AREA'S
             Y = conv(Y,ones(1,floor(PERIOD/objScope.sample_interval*0.95)+1),'same');
             YT = Y/max(Y);
-            %Y = (Y/max(Y))>(sum(Y/max(Y))/length(Y));
-            Y = (Y/max(Y))>0.575;
+            Y = (Y/max(Y))>(sum(Y/max(Y))/length(Y));
+            %Y = (Y/max(Y))>0.575;
             %% PLOTTING GRAPH 2-B
             if(verbose-(verbose>0))
                 plot(X(plotMin:plotMax),YT(plotMin:plotMax), 'color', [0.5 0.5 0.5]);
@@ -617,13 +633,14 @@ classdef uart < handle
             clear j K F sX dsX;
             %% GETTING BIT VALUE FOR ALL DETERMINED SAMPLES
             Vy = zeros(1,length(Vx));
+            maxX = length(X);
             j = find(X>Vx(1)-PERIOD/2,1);
-            Interval = PERIOD/4;                  
+            Interval = PERIOD/4;       
             for i=1:length(Vx)
                 k = 0;
                 if(Vx(i)>X(end));Vy(i)=0;break;end;
-                while X(j) < Vx(i) - Interval; j = j + 1; end;
-                while X(j) < Vx(i) + Interval
+                while maxX >= j && X(j) < Vx(i) - Interval; j = j + 1; end;
+                while maxX >= j && X(j) < Vx(i) + Interval
                     Vy(i) = Vy(i) + Y(j);
                     k = k + 1;
                     j = j + 1;
@@ -654,7 +671,7 @@ classdef uart < handle
                 subplot(4,1,4);
                 hold on;
                 X = objScope.time;
-                Y = objScope.values(channel);
+                Y = objScope.getValues(channel);
                 Y = Y-min(Y);
                 Y = Y/max(Y);
                 plot(X(plotMin:plotMax),Y(plotMin:plotMax),'r');
