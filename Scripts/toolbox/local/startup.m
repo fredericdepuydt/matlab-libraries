@@ -6,7 +6,7 @@ addpath(genpath(librarydirectory));
 cd(librarydirectory);
 savepath;
 %copyfile([funcdirectory '\startup.bak.m'],[mfilename('fullpath') '.m']);
-clear librarydirectory;
+clear funcdirectory;
 
 global rootdirectory;
 cd(rootdirectory);
