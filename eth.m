@@ -692,14 +692,33 @@ classdef eth < handle
                 if(~isequal(tmp,mac))
                     warn('MAC overflow or underflow (internal workaround: saturated)');
                 end
-                hex = dec2hex(mac,2);
-                hex(1:5,3) = ':';
-                hex = reshape(hex',1,18);
-                hex = hex(1:17);
+                hex = strjoin(strtrim(cellstr(dec2hex(mac',2))'),':');
             else
                 warn('MAC is not a 1x6 matrix or number (internal workaround: Zero address returned');
                 hex = '00:00:00:00:00:00';
             end
+        end
+        
+        function result = advanced_compare(A, operator, B)
+            switch(strtrim(operator))
+                case {'==','eq'}
+                    result = (A == B);  
+                case {'!='}
+                    warn('operator != is depreciated or may have unexpected results');
+                    result = (A ~= B);  
+                case {'>'}
+                    result = (A > B);  
+                case {'<'}
+                    result = (A < B);  
+                case {'<='}
+                    result = (A <= B);  
+                case {'>='}
+                    result = (A >= B);
+            end
+        end
+        
+        function str = ip2str(ip)
+            str = strjoin(strtrim(cellstr(num2str(ip'))'),'.');
         end
         
     end
@@ -800,20 +819,20 @@ classdef eth < handle
                 [logicals,filter] = filter_intern(obj,filterStr,verbose-(verbose>0));
                 result = obj(logicals);
                 if(verbose)
-                    disp(['FILTER: ' filter newline ' (' num2str(length(result)) ' results)']);
+                    disp(['FILTER: ' filter sprintf('\n') ' (' num2str(length(result)) ' results)']);
                 end                
             catch ME
                 if(strcmp(ME.identifier,'eth:filter_intern:invalid_filter'))
-                    warn(['Invalid filter: ' filterStr newline ' Error in filter part: ' ME.message newline ' (internal workaround: Filter not applied)']);
+                    warn(['Invalid filter: ' filterStr sprintf('\n') ' Error in filter part: ' ME.message '\n (internal workaround: Filter not applied)']);
                     result = obj;
                 elseif(strcmp(ME.identifier,'eth:filter_intern:unsupported_filter'))
-                    warn(['Unsupported filter: ' filterStr newline ' Filter "' ME.message '" not yet supported' newline ' (internal workaround: Filter not applied)']);
+                    warn(['Unsupported filter: ' filterStr sprintf('\n') ' Filter "' ME.message '" not yet supported' sprintf('\n') ' (internal workaround: Filter not applied)']);
                     result = obj;
                 else
                     rethrow(ME);
                 end
             end
-        end
+        end 
         
         function [result, filter] = filter_intern(obj, filterStr, verbose)
             expression = '^\s*\((.*)\)\s*$';
@@ -865,65 +884,134 @@ classdef eth < handle
             
             expression = '^\s*(eth\.src|eth\.dst|eth\.addr)\s*(==|!=|\seq\s)\s*([0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2}[:-][0-9a-fA-F]{1,2})\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
-            if ~isempty(tokens) %MAC
+            if ~isempty(tokens) %MAC ADDRESS
                 filterName = tokens{1}{1};
-                filterSign = isequal(tokens{1}{2},' eq ') | isequal(tokens{1}{2},'==');
-                filterValue = tokens{1}{3};
-                
-                mac = hex2dec(strsplit(tokens{1}{3},':'))';
+                filterSign = tokens{1}{2};
+                filterValue = hex2dec(strsplit(tokens{1}{3},':'))';
                 
                 result = logical.empty(0,length(obj));
                 
                 switch lower(filterName)
                     case {'eth.src'}
                         for i = 1:length(obj)
-                            result(i) = all(obj(i).srcMac == mac);
+                            result(i) = all(obj(i).srcMac == filterValue);
                         end
                     case {'eth.dst'}
                         for i = 1:length(obj)
-                            result(i) = all(obj(i).dstMac == mac);
+                            result(i) = all(obj(i).dstMac == filterValue);
                         end
                     case {'eth.addr'}                        
                         for i = 1:length(obj)
-                            result(i) = all((obj(i).srcMac == mac) | (obj(i).dstMac == mac));
+                            result(i) = all((obj(i).srcMac == filterValue) | (obj(i).dstMac == filterValue));
                         end
                 end
                 if(filterSign)
-                	filter = [filterName ' == ' eth.mac2hex(mac)];
+                	filter = [filterName ' == ' eth.mac2hex(filterValue)];
                 else
-                    filter = [filterName ' != ' eth.mac2hex(mac)];
+                    filter = [filterName ' != ' eth.mac2hex(filterValue)];
                 end
                 result = (result & filterSign) | (~filterSign & ~result);
                 return;
             end
             
-            expression = '^\s*eth\.type\s*(==|!=|\seq\s)\s*0x([0-9a-fA-F]+)\s*$';
+            expression = '^\s*(eth\.type|ip\.proto|pn_rt\.frame_id)\s*(==|!=|>=|<=|<|>|\seq\s)\s*(0x[0-9a-fA-F]+|\d+)\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
-            if ~isempty(tokens) %Ethertype as HEX
-                filterValue = hex2dec(tokens{1}{2});
-            else
-                expression = '^\s*eth\.type\s*(==|!=|\seq\s)\s*(\d+)\s*$';
-                [tokens, ~] = regexp(filterStr,expression,'tokens','match');
-                if ~isempty(tokens) %Ethertype as DEC
-                    filterValue = str2num(tokens{1}{2}); %#ok<ST2NM>
+            if ~isempty(tokens)
+                filterName = tokens{1}{1};
+                filterSign = strtrim(tokens{1}{2});
+                filterValue = tokens{1}{3}; % RAW filter Value
+                expression = '^0x([0-9a-fA-F]+)$';
+                [tokens, ~] = regexp(tokens{1}{3},expression,'tokens','match');
+                if ~isempty(tokens) %Value as HEX
+                    filterValue = hex2dec(tokens{1}{1});
+                else %Value as DEC
+                    filterValue = str2double(filterValue);
                 end
-            end
-            if ~isempty(tokens) %Ethertype
-                filterSign = isequal(tokens{1}{1},' eq ') | isequal(tokens{1}{1},'==');
+                
                 result = logical.empty(0,length(obj));
+                switch lower(filterName)
+                    case {'eth.type'}
+                        for i = 1:length(obj)                    
+                            result(i) = eth.advanced_compare(obj(i).ethertype,filterSign,filterValue);
+                        end                    
+                    case {'ip.proto'}                        
+                        for i = 1:length(obj)      
+                            result(i) = (isfield(obj(i).EtherTypeSpecificData,'IP') && ...
+                                         isfield(obj(i).EtherTypeSpecificData.IP,'protocol') && ...
+                                         eth.advanced_compare(obj(i).EtherTypeSpecificData.IP.protocol,filterSign,filterValue));
+                        end
+                    case {'pn_rt.frame_id'}
+                        for i = 1:length(obj) 
+                            result(i) = (isfield(obj(i).EtherTypeSpecificData,'PNIO_FrameID') && ...
+                                         eth.advanced_compare(hex2dec(obj(i).EtherTypeSpecificData.PNIO_FrameID),filterSign,filterValue));
+                        end
+                end                
+                filter = [lower(filterName) ' ' filterSign ' 0x' dec2hex(filterValue)];               
+                return;
+            end
+            
+            expression = '^\s*(ip\.proto|pn_rt\.frame_id)\s*(==|!=|>=|<=|<|>|\seq\s)\s*([0-9]+)\s*$';
+            [tokens, ~] = regexp(filterStr,expression,'tokens','match');
+            if ~isempty(tokens) %IP PROTOCOL
+                filterName = tokens{1}{1};
+                filterSign = isequal(tokens{1}{2},' eq ') | isequal(tokens{1}{2},'==');
+                filterValue = str2double(tokens{1}{3});
+                
+                result = logical.empty(0,length(obj));                 
                 for i = 1:length(obj)
-                    result(i) = (obj(i).ethertype == filterValue);
+                    
                 end
                 if(filterSign)
-                    filter = ['eth.type == 0x' dec2hex(filterValue,4)];
+                	filter = [filterName ' == ' filterValue];
                 else
-                    filter = ['eth.type != 0x' dec2hex(filterValue,4)];
+                    filter = [filterName ' != ' filterValue];
                 end
                 result = (result & filterSign) | (~filterSign & ~result);
                 return;
             end
             
-            expression = '^\s*(arp|ip|lldp|pn_io)\s*$';
+            expression = '^\s*(ip\.src|ip\.dst|ip\.addr)\s*(==|!=|\seq\s)\s*([0-9]{1,3}[\.][0-9]{1,3}[\.][0-9]{1,3}[\.][0-9]{1,3})\s*$';
+            [tokens, ~] = regexp(filterStr,expression,'tokens','match');
+            if ~isempty(tokens) %IP ADDRESS
+                filterName = tokens{1}{1};
+                filterSign = isequal(tokens{1}{2},' eq ') | isequal(tokens{1}{2},'==');                
+                filterValue = str2double(strsplit(tokens{1}{3},'.'));
+                
+                result = logical.empty(0,length(obj));
+                
+                switch lower(filterName)
+                    case {'ip.src'}
+                        for i = 1:length(obj)
+                            result(i) = (isfield(obj(i).EtherTypeSpecificData,'IP') && ...
+                                         isfield(obj(i).EtherTypeSpecificData.IP,'srcIP') && ...
+                                         all(obj(i).EtherTypeSpecificData.IP.srcIP == filterValue));
+                        end
+                    case {'ip.dst'}
+                        for i = 1:length(obj)
+                            result(i) = (isfield(obj(i).EtherTypeSpecificData,'IP') && ...
+                                         isfield(obj(i).EtherTypeSpecificData.IP,'dstIP') && ...
+                                         all(obj(i).EtherTypeSpecificData.IP.dstIP == filterValue));
+                        end
+                    case {'ip.addr'}                        
+                        for i = 1:length(obj)
+                            result(i) = (isfield(obj(i).EtherTypeSpecificData,'IP') && ...
+                                         isfield(obj(i).EtherTypeSpecificData.IP,'srcIP') && ...
+                                         isfield(obj(i).EtherTypeSpecificData.IP,'dstIP') && ...
+                                         (all(obj(i).EtherTypeSpecificData.IP.srcIP == filterValue) || ...                                         
+                                          all(obj(i).EtherTypeSpecificData.IP.dstIP == filterValue)));
+                                         
+                        end
+                end
+                if(filterSign)
+                	filter = [filterName ' == ' eth.ip2str(filterValue)];
+                else
+                    filter = [filterName ' != ' eth.ip2str(filterValue)];
+                end
+                result = (result & filterSign) | (~filterSign & ~result);
+                return;
+            end
+            
+            expression = '^\s*(arp|ip|udp|tcp|lldp)\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
             if ~isempty(tokens) %Ethertype as HEX
                 filter = tokens{1}{1};
@@ -933,14 +1021,36 @@ classdef eth < handle
                     case {'ip'}
                         [result, ~] = obj.filter_intern('eth.type == 0x0800');
                     case {'lldp'}
-                        [result, ~] = obj.filter_intern('eth.type == 0x88CC');                    
-                    case {'pn_io'}
-                        [result, ~] = obj.filter_intern('eth.type == 0x8892');
+                        [result, ~] = obj.filter_intern('eth.type == 0x88CC');
+                    case {'udp'}
+                        [result, ~] = obj.filter_intern('ip.proto == 17');              
+                    case {'tcp'}
+                        [result, ~] = obj.filter_intern('ip.proto == 6');
                 end
                 return;
             end
             
-            expression = '^\s*(dns|udp|tcp|pn_dcp|pn_mrp|pn_ptcp|pn_rt|pn_mrrt)\s*$';
+            expression = '^\s*(pn_io|pn_dcp|pn_rt|pn_ptcp)\s*$';
+            [tokens, ~] = regexp(filterStr,expression,'tokens','match');
+            if ~isempty(tokens) %Ethertype as HEX
+                switch lower(tokens{1}{1})
+                    case {'pn_rt'}
+                        filter = 'eth.type == 0x8892';                        
+                    case {'pn_io'}
+                        filter = 'eth.type == 0x8892 && pn_rt.frame_id >= 0x0100 && pn_rt.frame_id <= 0xFEFC';                       
+                    case {'pn_dcp'}
+                        filter = 'eth.type == 0x8892 && pn_rt.frame_id >= 0xFEFD && pn_rt.frame_id <= 0xFEFF';                       
+                    case {'pn_ptcp'}
+                        filter = 'eth.type == 0x8892 && (pn_rt.frame_id <= 0xFEFD || pn_rt.frame_id >= 0xFF00)';                        
+                end
+                warn(['Undocumented filter: `' tokens{1}{1} '` is lacking the required wireshark documentation to verify the correct working' ...
+                       sprintf('\n') ' Current implementation: ' filter ...
+                       sprintf('\n') ' Suggestion: manually compare with Wireshark and report any issues on the Github']);
+                [result, filter] = obj.filter_intern(filter);
+                return;
+            end
+            
+            expression = '^\s*(dns|pn_mrp|pn_mrrt)\s*$';
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
             if ~isempty(tokens) %Protocol
                 ME = MException('eth:filter_intern:unsupported_filter', filterStr);
