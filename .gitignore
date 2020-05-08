@@ -3,6 +3,9 @@
 *.asv
 *.csv
 
+# Exclude Debug and testing folders and files
+debug/*
+
 # Compiled source #
 ###################
 *.p
