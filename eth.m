@@ -5,7 +5,7 @@
 %  %    Author: Frederic Depuydt                                          %
 %  %    Company: KU Leuven                                                %
 %  %    Contact: frederic.depuydt@kuleuven.be; f.depuydt@outlook.com      %
-%  %    Version: 1.2                                                      %
+%  %    Version: 1.4                                                      %
 %  %                                                                      %
 %  %    An ETHERNET class to analyse packets from Wireshark               %
 %  %    and some Tektronix Osciloscopes.                                  %
@@ -886,7 +886,7 @@ classdef eth < handle
             [tokens, ~] = regexp(filterStr,expression,'tokens','match');
             if ~isempty(tokens) %MAC ADDRESS
                 filterName = tokens{1}{1};
-                filterSign = tokens{1}{2};
+                filterSign = isequal(tokens{1}{2},' eq ') | isequal(tokens{1}{2},'==');
                 filterValue = hex2dec(strsplit(tokens{1}{3},':'))';
                 
                 result = logical.empty(0,length(obj));
