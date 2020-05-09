@@ -2,7 +2,7 @@ close all;
 
 %% inlezen isf files
 if(~exist('first','var') || first)
-    objEth = eth.pcapread('PROFINET - Startup.pcapng');
+    objEth = eth.pcapread('PROFINET - Startup.pcapng',0);
     first = false;
 end
 
@@ -39,3 +39,10 @@ objEth.filter('ip and eth.dst == 00:0E:8C:FA:E1:14',-1);
 objEth.filter('(arp or ip) and eth.dst == 00:0E:8C:FA:E1:14',-1);
 objEth.filter('!eth.addr == 00:0E:8C:FA:E1:14',-1);
 objEth.filter('eth.addr != 00:0E:8C:FA:E1:14',-1);
+
+%% PROFINET Specific Filters
+objEth.filter('pn_rt',-1);
+objEth.filter('pn_io',-1);
+objEth.filter('pn_dcp',-1);
+objEth.filter('pn_rt.frame_id == 0xFE01',-1);
+objEth.filter('pn_rt.frame_id == 0xFC01',-1);
