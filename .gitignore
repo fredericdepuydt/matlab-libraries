@@ -9,3 +9,7 @@ debug/*
 # Compiled source #
 ###################
 *.p
+
+# VS Code files 
+.vs
+*.code-workspace
