@@ -1,0 +1,3 @@
+# Ignore all target files except .jar
+target/*
+!target/*.jar
