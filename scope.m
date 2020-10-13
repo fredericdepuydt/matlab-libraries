@@ -16,15 +16,15 @@
 %  %                                                                      %
 %  %    usage: objScope = scope.function(var1, var2, ...)                 %
 %  %                                                                      %
-%  %    csvread(                Reading scope signals from a CSV file     %
+%  %    isfread(                Reading scope signals from an ISF file    %
+%  %        file,                   Filename + extension as String        %
+%  %        verbose)                Integer to enable verbose mode        %
+%  %                                                                      %
+%  %    csvread(                DEPRECATED! Reading from a CSV file       %
 %  %        file,                   Filename + extension as String        %
 %  %        channels,               Array of strings refering to channels %
 %  %        verbose,                Integer to enable verbose mode        %
 %  %        retime)                 Calculate more accurate timestamps    %
-%  %                                                                      %
-%  %    isfread(                Reading scope signals from an ISF file    %
-%  %        file,                   Filename + extension as String        %
-%  %        verbose)                Integer to enable verbose mode        %
 %  %                                                                      %
 %  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %  %        FUNCTIONS (non-static)                                        %
@@ -197,13 +197,13 @@ classdef scope
                 P2 = abs(fft(Y)/L);
                 ax = plt.getaxis(obj.time,[X,Y]);
                 subplot(2,1,1);
-                plt.fast(obj.time,X,1e6,color.ch1);
+                plt(obj.time,X,'downsample',1e6,color.ch1);
                 title('Original signal');
                 xlabel('t(s)');
                 ylabel('X(t)');
                 axis(ax);
                 subplot(2,1,2);
-                plt.fast(obj.time,Y,1e6,color.ch1);
+                plt(obj.time,Y,'downsample',1e6,color.ch1);
                 title('Filtered signal');
                 xlabel('t(s)');
                 ylabel('X(t)');
@@ -475,6 +475,67 @@ classdef scope
                 
             end
         end
+        
+        function obj = wfmread(file, verbose)
+            if(~exist('verbose','var'));verbose=-1;warn('All underlying functions are executed in verbose mode');end;
+            if ~exist('file', 'var')
+                error('No file name, directory or pattern was specified.');
+            end
+            
+            % Check whether file is a folder.
+            if( exist(file, 'dir') )
+                folder = file;
+                % Get a list of all files that have the extension '.isf' or '.ISF'.
+                files = [ dir(fullfile(folder, '*.isf')) ];
+            else
+                % The pattern is not a folder, so must be a file name or a pattern with
+                % wildcards (such as 'Traces/TEK0*.ISF').
+                [folder, ~, ~] = fileparts(file);
+                % Get a list of all files and folders which match the pattern...
+                filesAndFolders = dir(file);
+                % ...then exclude the folders, to get just a list of files.
+                files = filesAndFolders(~[filesAndFolders.isdir]);
+            end
+            
+            fileNames = {files.name};
+            datetimes = datestr([files.datenum]);
+            
+            if numel(fileNames)==0
+                error('The pattern did not match any file or files: %s', file);
+            end
+            
+            obj = scope('Unknown (WFM)');
+            obj.firmware_version = 'Unknown (WFM)';
+            
+            for s=1:numel(fileNames)
+                fileName = fileNames{s};
+                fullFileName = fullfile(folder, fileName);
+                
+                % Check the file exists.
+                if( ~exist(fullFileName, 'file') )
+                    error('The file does not exist: %s', fullFileName);
+                end
+                
+                % Read the file.
+                [y, t, info] = wfm2read(fullFileName);
+                
+                obj.waveform_type       = info.versioning_number;
+                obj.sample_interval     = 1/info.samplingrate;
+                obj.record_length       = 'Unknown (WFM)';
+                obj.gating              = 'Unknown (WFM)';
+                obj.gating_min          = 'Unknown (WFM)';
+                obj.gating_max          = 'Unknown (WFM)';
+                obj.sample_length       = info.nop;
+              
+                obj.time = t';
+                
+                obj.channels{s} = 'CH1';
+                obj.value{s} = y';
+                
+            end
+        end
+        
+        
         function obj = csvread(file,channels,verbose,retime)
             if(~exist('verbose','var'));verbose=-1;warn('All underlying functions are executed in verbose mode');end;
             if(~exist('retime','var'));retime=1;end;
